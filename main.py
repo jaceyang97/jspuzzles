@@ -20,16 +20,16 @@ def fmt_states(states):
     return '\n'.join(out)
 
 
-def run(n, green, clues, *, expected=None, max_steps=None, verbose=True, max_solutions=1):
-    print(f'Puzzle {n}x{n}: {len(clues)} clues, {len(green)} green cells.')
+def run(n, green, clues, *, expected=None, max_steps=None, verbose=True, max_solutions=1, order='row_major'):
+    print(f'Puzzle {n}x{n}: {len(clues)} clues, {len(green)} green cells. order={order}')
     s = Solver(n, green, clues, verbose=verbose)
     t0 = time.time()
     try:
-        s.solve(max_solutions=max_solutions, max_steps=max_steps)
+        s.solve(max_solutions=max_solutions, max_steps=max_steps, order_kind=order)
     except KeyboardInterrupt:
         print('Interrupted')
     elapsed = time.time() - t0
-    print(f'Steps: {s.steps:,}  Elapsed: {elapsed:.2f}s  Solutions: {len(s.solutions)}')
+    print(f'Steps: {s.steps:,}  Elapsed: {elapsed:.2f}s  Solutions: {len(s.solutions)}  max_idx={s.max_idx}/{n*n}')
     for k, (states, info) in enumerate(s.solutions):
         print(f'\n--- Solution {k} ---')
         print(fmt_states(states))
@@ -50,14 +50,15 @@ def main():
     ap.add_argument('--example', action='store_true', help='Run the 4x4 example')
     ap.add_argument('--max-steps', type=int, default=None)
     ap.add_argument('--quiet', action='store_true')
+    ap.add_argument('--order', default='row_major', choices=['row_major', 'boundary_first', 'clues_first'])
     args = ap.parse_args()
 
     if args.example:
         run(EXAMPLE_N, EXAMPLE_GREEN, EXAMPLE_CLUES,
             expected=EXAMPLE_ANSWER, max_steps=args.max_steps,
-            verbose=not args.quiet)
+            verbose=not args.quiet, order=args.order)
     else:
-        run(N, GREEN, CLUES, max_steps=args.max_steps, verbose=not args.quiet)
+        run(N, GREEN, CLUES, max_steps=args.max_steps, verbose=not args.quiet, order=args.order)
 
 
 if __name__ == '__main__':

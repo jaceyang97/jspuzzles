@@ -173,11 +173,29 @@ class Solver:
             return [NO_ARC]
         return list(ARC_STATES)
 
-    def solve(self, max_solutions=1, max_steps=None):
+    def _build_order(self, kind):
+        n = self.n
+        cells = [(r, c) for r in range(n) for c in range(n)]
+        if kind == 'row_major':
+            return cells
+        if kind == 'boundary_first':
+            # Order by distance to nearest grid edge (smaller first), tie-break
+            # by row then column.
+            return sorted(cells, key=lambda rc: (
+                min(rc[0], rc[1], n - 1 - rc[0], n - 1 - rc[1]),
+                rc[0], rc[1]
+            ))
+        if kind == 'clues_first':
+            clue_set = set(self.clues)
+            return sorted(cells, key=lambda rc: (0 if rc in clue_set else 1, rc))
+        raise ValueError(kind)
+
+    def solve(self, max_solutions=1, max_steps=None, order_kind='row_major'):
         n = self.n
         states = [[NO_ARC] * n for _ in range(n)]
-        order = [(r, c) for r in range(n) for c in range(n)]
+        order = self._build_order(order_kind)
         self.steps = 0
+        self.max_idx = 0
         self.solutions = []
         self._max_steps = max_steps
         self.dsu = IncrementalDSU()
@@ -200,8 +218,10 @@ class Solver:
         self.steps += 1
         if self._max_steps is not None and self.steps > self._max_steps:
             raise _StopSearch()
+        if idx > self.max_idx:
+            self.max_idx = idx
         if self.verbose and self.steps % self.log_every == 0:
-            print(f'  steps={self.steps:,} idx={idx}/{len(order)}', file=sys.stderr, flush=True)
+            print(f'  steps={self.steps:,} idx={idx}/{len(order)} max_idx={self.max_idx}', file=sys.stderr, flush=True)
 
         if idx == len(order):
             ok, info = self._validate_full(states)
@@ -304,9 +324,23 @@ class Solver:
         """
         n = self.n
 
-        # Interior vertex no-dangle check (vertex (r, c) finalized).
-        if r >= 1 and c >= 1 and r <= n - 1 and c <= n - 1:
-            cnt = _endpoint_count_at_vertex(states, r, c, n)
+        # Interior vertex no-dangle check.
+        # When cell (r, c) is assigned, its 4 corners are at lattice vertices
+        # (r, c), (r, c+1), (r+1, c), (r+1, c+1). Each becomes "finalized"
+        # when ALL of its surrounding cells are assigned. Check each that
+        # is now finalized AND interior.
+        for vr, vc in ((r, c), (r, c + 1), (r + 1, c), (r + 1, c + 1)):
+            if not (1 <= vr <= n - 1 and 1 <= vc <= n - 1):
+                continue
+            # Are all 4 surrounding cells assigned?
+            surrounding = (
+                (vr - 1, vc - 1), (vr - 1, vc),
+                (vr, vc - 1), (vr, vc),
+            )
+            all_assigned = all(self._is_assigned(rr, cc, idx + 1) for rr, cc in surrounding)
+            if not all_assigned:
+                continue
+            cnt = _endpoint_count_at_vertex(states, vr, vc, n)
             if cnt == 1:
                 return False
 
